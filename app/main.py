@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.routes import body as measurements
 
 app = FastAPI(
     title="Virtual Dressing Room API",
@@ -15,6 +16,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(measurements.router, prefix="/api", tags=["Measurements"])
 
 @app.get("/")
 def root():
