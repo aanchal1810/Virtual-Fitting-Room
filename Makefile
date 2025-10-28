@@ -1,23 +1,29 @@
 # Makefile for Virtual Dressing Room
 
-# Activate virtual environment
 VENV = venv
+REQ = requirements.txt
+PYTHON = python3
+UVICORN = $(VENV)/bin/uvicorn
 
-# Run the FastAPI app
-run:
+# Default target
+run: $(VENV)/bin/activate
 	@echo "🚀 Starting FastAPI with Uvicorn..."
-	$(VENV)/Scripts/uvicorn app.main:app --reload || $(VENV)/bin/uvicorn app.main:app --reload
+	$(VENV)/bin/pip install -r $(REQ)
+	$(UVICORN) app.main:app --reload
 
-# Install dependencies
-install:
+# Create virtual environment if it doesn't exist
+$(VENV)/bin/activate: $(REQ)
+	@echo "🐍 Creating virtual environment..."
+	$(PYTHON) -m venv $(VENV)
+	@echo "✅ Virtual environment ready!"
+
+install: $(VENV)/bin/activate
 	@echo "📦 Installing dependencies..."
-	pip install -r requirements.txt
+	$(VENV)/bin/pip install -r $(REQ)
 
-# Save dependencies
 freeze:
-	pip freeze > requirements.txt
+	$(VENV)/bin/pip freeze > $(REQ)
 
-# Clean pycache
 clean:
 	@echo "🧹 Cleaning __pycache__ folders..."
 	find . -type d -name "__pycache__" -exec rm -r {} +

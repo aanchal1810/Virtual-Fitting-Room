@@ -10,7 +10,7 @@ mp_selfie = mp.solutions.selfie_segmentation
 # default depth ratios (front width -> depth) if no side image is available
 DEFAULT_DEPTH_RATIOS = {"bust": 0.55, "waist": 0.47, "hip": 0.62}
 
-class BodyMeasurementExtractorV3:
+class BodyMeasurementExtractor:
     def __init__(self,
                  pose_complexity: int = 1,
                  min_detection_confidence: float = 0.6,
@@ -277,16 +277,17 @@ class BodyMeasurementExtractorV3:
             cv2.putText(vis, f"height_src:{height_source} h_cm:{results['height_cm']}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
             cv2.putText(vis, f"waist_cm:{results['waist_circumference_cm']}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
             cv2.imwrite(debug_out_path, vis)
+            
 
         return results
 
 # quick usage example (run as script)
-if __name__ == "__main__":
-    extractor = BodyMeasurementExtractorV3()
-    front = "sample.jpeg"
-    # optionally ask user to input one true measurement to calibrate
-    known = {"waist_cm": 74}  # replace with real waist if available, else None
-    res = extractor.extract_measurements(front, user_height_cm=165.0, known_measurement=known, debug_out_path="debug_v3.jpg")
-    for k,v in res.items():
-        print(k, ":", v)
-    print("Debug image written to debug_v3.jpg")
+# if __name__ == "__main__":
+#     extractor = BodyMeasurementExtractorV3()
+#     front = "sample.jpeg"
+#     # optionally ask user to input one true measurement to calibrate
+#     known = {"waist_cm": 74}  # replace with real waist if available, else None
+#     res = extractor.extract_measurements(front, user_height_cm=165.0, known_measurement=known, debug_out_path="debug_v3.jpg")
+#     for k,v in res.items():
+#         print(k, ":", v)
+#     print("Debug image written to debug_v3.jpg")
