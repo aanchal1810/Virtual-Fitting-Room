@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import body as measurements
+from app.routes import classifyPose as pose
+from app.routes import tryon
 
 app = FastAPI(
     title="Virtual Dressing Room API",
@@ -18,7 +20,8 @@ app.add_middleware(
 )
 
 app.include_router(measurements.router, prefix="/api", tags=["Measurements"])
-
+app.include_router(pose.router, prefix="/api", tags=["Pose Detection"])
+app.include_router(tryon.router, prefix="/tryon", tags=["Virtual Try-On"])
 @app.get("/")
 def root():
     return {"message": "Virtual Dressing Room API is running"}
