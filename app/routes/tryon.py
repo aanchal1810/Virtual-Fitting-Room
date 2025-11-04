@@ -18,28 +18,32 @@ os.makedirs(UPLOADS, exist_ok=True)
 os.makedirs(OUTPUTS, exist_ok=True)
 
 # Define a standard size for your model
-# SD 1.5 models are trained at 512x512, but 512x768 (portrait) is also common
 MODEL_WIDTH = 512
 MODEL_HEIGHT = 768
 
-# --- 1. FIX: Load models in float16 for memory efficiency on Mac ---
+# --- 1. Load models ---
 print("Loading models...")
 pose_estimator = PoseEstimator(debug=False)
 
 controlnet = ControlNetModel.from_pretrained(
-    "lllyasviel/control_v11p_sd15_openpose", 
-    torch_dtype=torch.float32  # Use float16
+    "lllyasviel/control_v11p_sd15_openpose",
+    torch_dtype=torch.float16  # Use float16 for memory efficiency
 )
+
 pipe = StableDiffusionControlNetPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5", 
-    controlnet=controlnet, 
-    torch_dtype=torch.float32  # Use float16
-).to("mps")
-print("Models loaded.")
+    "runwayml/stable-diffusion-v1-5",
+    controlnet=controlnet,
+    torch_dtype=torch.float16
+)
+
+# --- Move pipeline to CUDA if available, else CPU ---
+device = "cuda" if torch.cuda.is_available() else "cpu"
+pipe = pipe.to(device)
+print(f"Models loaded on {device}.")
 
 @router.post("/tryon")
 async def try_on(user: UploadFile = File(...), outfit: UploadFile = File(...)):
-    # Save user image
+    # Save user and outfit images
     uid = str(uuid.uuid4())
     user_path = os.path.join(UPLOADS, f"user_{uid}.jpg")
     outfit_path = os.path.join(UPLOADS, f"outfit_{uid}.jpg")
@@ -48,26 +52,16 @@ async def try_on(user: UploadFile = File(...), outfit: UploadFile = File(...)):
     with open(outfit_path, "wb") as f:
         f.write(await outfit.read())
 
-    # --- 2. FIX: Resize images *before* processing to prevent memory error ---
+    # Resize images before processing
     target_size = (MODEL_WIDTH, MODEL_HEIGHT)
-    # 1️⃣ Get pose image (skeleton)
-    pose_data = pose_estimator.process_image(user_path)
-    pose_img = Image.fromarray(pose_data["annotated_image"])
 
-    # --- ADD THIS FOR DEBUGGING ---
-    pose_img.save(os.path.join(OUTPUTS, f"debug_pose_{uid}.png"))
-    # -------------------------------
-
-    # 2️⃣ Get outfit mask (remove background)
-    outfit_img = remove_background(outfit_path)
-    
-    # Load, resize, and re-save user image
     try:
+        # Resize user image
         user_img_pil = Image.open(user_path).convert("RGB")
         user_img_pil = user_img_pil.resize(target_size, Image.Resampling.LANCZOS)
         user_img_pil.save(user_path)
 
-        # Load, resize, and re-save outfit image
+        # Resize outfit image
         outfit_img_pil = Image.open(outfit_path).convert("RGB")
         outfit_img_pil = outfit_img_pil.resize(target_size, Image.Resampling.LANCZOS)
         outfit_img_pil.save(outfit_path)
@@ -75,31 +69,31 @@ async def try_on(user: UploadFile = File(...), outfit: UploadFile = File(...)):
         print(f"Error resizing images: {e}")
         return {"error": "Could not process uploaded images."}
 
-
-    # 1️⃣ Get pose image (skeleton) from the *resized* user image
+    # 1️⃣ Get pose image (skeleton) from the resized user image
     pose_data = pose_estimator.process_image(user_path)
     pose_img = Image.fromarray(pose_data["annotated_image"])
 
-    # 2️⃣ Get outfit mask (remove background) from the *resized* outfit image
-    #    *** CRITICAL: This variable 'outfit_img' is NOT used by your pipeline! ***
-    #    See explanation below.
+    # Save pose image for debugging
+    pose_img.save(os.path.join(OUTPUTS, f"debug_pose_{uid}.png"))
+
+    # 2️⃣ Get outfit mask (remove background)
     outfit_img = remove_background(outfit_path)
 
-    # --- 3. FIX: Correct the pipeline call ---
-    # The prompt is generic because the model CANNOT see your outfit.
+    # --- Pipeline inference ---
     prompt = "a realistic photo of a person, full body, high quality clothing, studio lighting"
     negative_prompt = "monochrome, lowres, bad anatomy, worst quality, gross, deformed, blurry"
 
-    # The 'image' param IS the control image (the pose) for this pipeline
-    result = pipe(
-        prompt=prompt,
-        negative_prompt=negative_prompt,
-        image=pose_img,  # Pass the pose image as the main control
-        num_inference_steps=30,
-        guidance_scale=7.5,
-    ).images[0]
+    # Use torch autocast for GPU float16 efficiency
+    with torch.autocast(device_type=device if device=="cuda" else "cpu"):
+        result = pipe(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            image=pose_img,  # Pass pose image as control
+            num_inference_steps=30,
+            guidance_scale=7.5,
+        ).images[0]
 
-    # 4️⃣ Save output
+    # Save output
     output_path = os.path.join(OUTPUTS, f"tryon_{uid}.png")
     result.save(output_path)
 
